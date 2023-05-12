@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const app = express()
 require('dotenv').config()
 
@@ -32,6 +33,32 @@ const client = new MongoClient(uri, {
   }
 });
 
+const varifyJWT = (req, res, next) => {
+  const authorization = req.headers.authorization
+
+  if (!authorization) {
+    return res.status(401).send({ error: 1, message: 'Unauthorized Access' })
+  }
+
+  const token = authorization.split(' ')[1];
+
+  jwt.verify(token, process.env.ACCESS_TOKEN, (err, decord) => {
+    if (err) {
+      return res.status(401).send({ error: 1, message: 'Unauthorized Access' })
+    }
+
+    req.decord = decord
+    next()
+
+  })
+
+  // console.log(req.headers.authorization)
+
+}
+
+
+
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -56,7 +83,7 @@ async function run() {
       const id = req.params.id
       const quary = { _id: new ObjectId(id) }
       const options = {
-        projection: { title: 1, price: 1, service_id: 1 ,img :1 },
+        projection: { title: 1, price: 1, service_id: 1, img: 1 },
       };
       const result = await carsCollection.findOne(quary, options)
       res.send(result)
@@ -67,8 +94,15 @@ async function run() {
     // find some data 
     // http://localhost:5000/bookings?email=yeasinaa@gmail.com&sort=1
 
-    app.get('/bookings', async (req, res) => {
-      // console.log(req.query.email)
+    app.get('/bookings', varifyJWT, async (req, res) => {
+      console.log(req.decord)
+      const decord = req.decord
+
+      if (decord.email !== req.query.email) {
+        return res.send({ error: 1, message: 'forbidden access' })
+
+      }
+
       let query = {}
       if (req.query?.email) {
         query = { email: req.query.email }
@@ -86,40 +120,47 @@ async function run() {
     // bookings 
     app.post('/bookings', async (req, res) => {
       const bookings = req.body
-      console.log(bookings)
+      // console.log(bookings)
       const result = await bookingCollection.insertOne(bookings)
       res.send(result)
     })
 
-    app.patch('/bookings/:id',async(req,res) =>{
-      const id = req.params.id 
-      const filter = {_id : new ObjectId(id)}
+    app.patch('/bookings/:id', async (req, res) => {
+      const id = req.params.id
+      const filter = { _id: new ObjectId(id) }
 
       const updatedBooking = req.body
 
 
-      const updated ={
-        $set:{
-          status : updatedBooking.status
+      const updated = {
+        $set: {
+          status: updatedBooking.status
         }
       }
       // console.log(updatedBooking)
 
 
-      const result = await bookingCollection.updateOne(filter,updated)
+      const result = await bookingCollection.updateOne(filter, updated)
       res.send(result)
     })
 
-    app.delete('/bookings/:id',async(req,res)=>{
-      const id = req.params.id 
-      const quary = {_id : new ObjectId(id)}
+    app.delete('/bookings/:id', async (req, res) => {
+      const id = req.params.id
+      const quary = { _id: new ObjectId(id) }
       const result = await bookingCollection.deleteOne(quary)
       res.send(result)
 
     })
 
 
-
+    // jwt token 
+    app.post('/jwt', (req, res) => {
+      const user = req.body
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
+        expiresIn: '1hr'
+      })
+      res.send({ token })
+    })
 
 
 
